@@ -1,3 +1,6 @@
+const dotenv = require('dotenv');
+dotenv.config();
+
 module.exports = {
-	JWT_SECRET: "1wdvbmp-(*^$Rdcbjk"
+	JWT_SECRET: process.env.JWT_SECRET_Pass
 }
