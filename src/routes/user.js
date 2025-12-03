@@ -6,6 +6,14 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const { JWT_SECRET } = require("../config");
 const { authMiddleware } = require("./authMiddleware");
+const rateLimit = require("../middleware/rateLimiter");
+
+// Rate limiter for auth routes
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  maxRequests: 5, // 5 attempts
+  message: 'Too many authentication attempts, please try again later.'
+});
 
 const signupBody = zod.object({
   username: zod.string().email(),
@@ -15,7 +23,7 @@ const signupBody = zod.object({
 });
 
 //SIGN-UP
-router.post("/signup", async (req, res) => {
+router.post("/signup", authLimiter, async (req, res) => {
   try {
     const parsed = signupBody.safeParse(req.body);
     if (!parsed.success) {
@@ -63,7 +71,7 @@ const signinBody = zod.object({
   password: zod.string().min(6),
 });
 
-router.post("/signin", async (req, res) => {
+router.post("/signin", authLimiter, async (req, res) => {
   try {
     const parsed = signinBody.safeParse(req.body);
     if (!parsed.success) {

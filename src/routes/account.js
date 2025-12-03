@@ -29,31 +29,63 @@ router.post("/transfer", authMiddleware, async (req, res) => {
 	try {
 		const { amount, to } = req.body;
 
-		if (!amount || !to || amount <= 0) {
+		// Validation
+		if (!amount || !to) {
 			await session.abortTransaction();
-			return res.status(400).json({ message: "Invalid input" });
+			return res.status(400).json({ message: "Amount and recipient are required" });
+		}
+
+		const numAmount = Number(amount);
+		if (isNaN(numAmount) || numAmount <= 0) {
+			await session.abortTransaction();
+			return res.status(400).json({ message: "Invalid amount" });
+		}
+
+		// Check sender can't send to themselves
+		if (req.userId === to) {
+			await session.abortTransaction();
+			return res.status(400).json({ message: "Cannot transfer to yourself" });
 		}
 
 		const fromAccount = await Account.findOne({ userId: req.userId }).session(session);
 
-		if (!fromAccount || fromAccount.balance < amount) {
+		if (!fromAccount) {
 			await session.abortTransaction();
-			return res.status(400).json({ message: "Insufficient balance" });
+			return res.status(404).json({ message: "Sender account not found" });
+		}
+
+		if (fromAccount.balance < numAmount) {
+			await session.abortTransaction();
+			return res.status(400).json({ 
+				message: "Insufficient balance",
+				currentBalance: fromAccount.balance / 100
+			});
 		}
 
 		const toAccount = await Account.findOne({ userId: to }).session(session);
 
 		if (!toAccount) {
 			await session.abortTransaction();
-			return res.status(400).json({ message: "Invalid recipient account" });
+			return res.status(404).json({ message: "Recipient account not found" });
 		}
 
 		// Debit sender, credit receiver
-		await Account.updateOne({ userId: req.userId }, { $inc: { balance: -amount } }).session(session);
-		await Account.updateOne({ userId: to }, { $inc: { balance: amount } }).session(session);
+		await Account.updateOne(
+			{ userId: req.userId }, 
+			{ $inc: { balance: -numAmount } }
+		).session(session);
+		
+		await Account.updateOne(
+			{ userId: to }, 
+			{ $inc: { balance: numAmount } }
+		).session(session);
 
 		await session.commitTransaction();
-		res.status(200).json({ message: "Transfer successful" });
+		res.status(200).json({ 
+			message: "Transfer successful",
+			amount: numAmount / 100,
+			newBalance: (fromAccount.balance - numAmount) / 100
+		});
 	} catch (err) {
 		await session.abortTransaction();
 		console.error("Transfer error:", err);
